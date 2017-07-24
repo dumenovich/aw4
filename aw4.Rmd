@@ -1,0 +1,130 @@
+---
+title: "Prediction Assignment Writeup"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Dumenko Mikhail
+#### 24/07/2017
+
+## Background
+
+Human activity recognition research has traditionally focused on discriminating between different activities.
+However, the “how (well)” investigation has only received little attention so far, even though it potentially
+provides useful information for a large variety of applications,such as sports training
+(http://groupware.les.inf.puc-rio.br/har (http://groupware.les.inf.puc-rio.br/har)).
+For the prediction of how welll individuals performed the assigned exercise six young health participants
+were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different
+fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting
+the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to
+the front (Class E).
+This report aims to use machine learning algoritmhs to predict the class of exercise the individuals was
+performing by using meaurements available from devices such as Jawbone Up, Nike FuelBand, and Fitbit.
+
+## Loading and cleaning the data
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+library(rpart)
+library(randomForest)
+library(e1071)
+library(ggplot2)
+```
+
+
+Two data set were available a training set (pml-training.csv) and a test set (pmltesting.
+csv) for which 20 individuals without any classification for the class of exercise was available.
+
+```{r}
+setwd("C:/Users/dumenko/Desktop/coursera/8 - Practical Machine Learning")
+```
+
+The data contains mostly numerical features. However, many of them contain
+nonstandard coded missing values. In addition to the standard NA, there are also empty
+strings "", and error expressions "#DIV/0!". All variables with at least one “NA” were excluded from the analysis.
+
+```{r}
+dataTrain<-read.csv("pml-training.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+dataTest<-read.csv("pml-testing.csv", header=T, na.string=c("NA", "#DIV/0!"))
+
+dim(dataTrain)
+```
+
+There are 19622 observation in traning dataset, including 160 variables. The last column is the target variable classe with values A, B, C, D, and E.
+
+```{r}
+table(dataTrain$classe)
+```
+
+Variables related to time and user information were excluded for a total of 51 variables and 19622 class measurements. Several variables are not direcly related to the target variable classe, also removed (“x”, “user_name”, all the time related variables, etc.)
+Same variables were mainteined in the test dataset to be used for predicting the 20 test cases provided.
+
+```{r}
+noNA_dataTrain<-dataTrain[, apply(dataTrain, 2, function(x) !any(is.na(x)))]
+dim(noNA_dataTrain)
+```
+
+```{r}
+## User information, time and undefined
+clean_Train<-noNA_dataTrain[,-c(1:8)]
+dim(clean_Train)
+```
+
+```{r}
+## Validation dataset
+clean_Test<-dataTest[,names(clean_Train[,-52])]
+dim(clean_Test)
+```
+
+## Data Prediction and Modelling
+
+The cleaned dataset was subset in order to generate a test set independent from the 20 cases provided set. Partitioning was performed to obtain a 75% training set and a 25% test set.
+
+```{r}
+inTrain <- createDataPartition(y=clean_Train$classe, p=0.75,list=F)
+training <-clean_Train[inTrain,]
+test <- clean_Train[-inTrain,]
+```
+
+Algorithm which will be used for the predictive model here is Random Forest.
+
+```{r}
+set.seed(2017)
+setting <- trainControl(method="cv", number=5, allowParallel=T, verbose=T)
+fit_rf <- train(classe~.,data=training, method="rf", trControl=setting, verbose=F)
+
+fit_rf
+```
+
+```{r}
+pred_rf <- predict(fit_rf, newdata=test)
+confusionMatrix(pred_rf, test$classe)
+```
+
+Random forest trees were generated for the training dataset using cross-validation. Then the generated algorithm was examnined under the partitioned training set to examine the accuracy and estimated error of prediction. By using 51 predictors for five classes using cross-validation at a 5-fold an accuracy of 99.12% with a 95% CI [0.988-0.994] was achieved accompanied by a Kappa value of 0.99.
+
+```{r}
+pred_20 <- predict(fit_rf, newdata=clean_Test)
+pred_20
+```
+
+A boosting algorithm was also run to confirm and be able to compare predictions. The boosting approach presented less accuracy (96%). However, when the predictions for the 20 test cases were compared match was same for both ran algorimths.
+
+```{r}
+setting2 <- trainControl(method="cv", number=5, allowParallel=T, verbose=T)
+fit_gbm <- train(classe~.,data=training, method="gbm", trControl=setting2, verbose=F)
+fit_gbm$finalModel
+
+class(fit_gbm)
+
+pred_gmb <- predict(fit_gbm, newdata=test)
+confusionMatrix(pred_gmb, test$classe)
+```
+
+```{r}
+pred_20_gbm <- predict(fit_gbm, newdata=clean_Test)
+pred_20_gbm
+```
